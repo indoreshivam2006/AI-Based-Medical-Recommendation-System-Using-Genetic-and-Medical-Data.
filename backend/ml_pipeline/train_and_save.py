@@ -59,10 +59,10 @@ X_train, X_test, y_train, y_test = train_test_split(
 print(f"Training Model on {X_train.shape[0]} samples and {len(feature_columns)} features...")
 
 model_optimized = RandomForestClassifier(
-    n_estimators=400,        
-    max_depth=None,          
-    min_samples_split=5,   
-    min_samples_leaf=2,
+    n_estimators=50,        
+    max_depth=15,          
+    min_samples_split=10,   
+    min_samples_leaf=5,
     max_features='sqrt',    
     random_state=42,
     n_jobs=-1

@@ -71,14 +71,14 @@ coverage/
 .vercel/
 
 # ML data, model artifacts, and generated notebooks
-*.pkl
+# *.pkl
 *.joblib
 *.h5
 *.onnx
 *.csv
 *.parquet
 *.feather
-backend/models/
+# backend/models/
 backend/data/
 backend/ml_pipeline/.ipynb_checkpoints/
 
