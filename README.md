@@ -205,6 +205,5 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 ## Author
 
 - Name: Shivam Indore
-- GitHub: [Add your GitHub profile]
-- Email: [Add your email]
-- LinkedIn: [Add your LinkedIn profile]
+- GitHub: https://github.com/indoreshivam2006
+- Email: indoreshivam2006@gmail.com
