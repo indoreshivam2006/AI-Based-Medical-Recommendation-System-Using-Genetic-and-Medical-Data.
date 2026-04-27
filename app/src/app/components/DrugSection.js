@@ -202,7 +202,8 @@ export default function DrugSection() {
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
 
   useEffect(() => {
-    fetch("http://localhost:8000/drugs")
+    const apiUrl = "https://ai-based-medical-recommendation-system.onrender.com";
+    fetch(`${apiUrl}/drugs`)
       .then((res) => res.json())
       .then((data) => {
         setDrugs(data.drugs);
