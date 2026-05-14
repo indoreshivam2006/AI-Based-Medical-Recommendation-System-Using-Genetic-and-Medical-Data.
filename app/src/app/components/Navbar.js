@@ -63,6 +63,13 @@ export default function Navbar() {
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-accent-purple to-accent-teal rounded-full transition-all duration-400 group-hover:w-full" />
             </a>
           ))}
+          <Link
+            href="/knowledge-base"
+            className="text-sm font-medium text-text-secondary hover:text-text-primary relative py-1 transition-colors duration-200 group"
+          >
+            Knowledge Base
+            <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-accent-purple to-accent-teal rounded-full transition-all duration-400 group-hover:w-full" />
+          </Link>
         </div>
 
         {/* CTA Button */}
@@ -120,6 +127,13 @@ export default function Navbar() {
               {item.label}
             </a>
           ))}
+          <Link
+            href="/knowledge-base"
+            onClick={() => setMobileOpen(false)}
+            className="text-text-secondary hover:text-text-primary transition-colors py-2 text-lg font-medium"
+          >
+            Knowledge Base
+          </Link>
           <Link href="/prediction" className="w-full">
             <button className="btn-glow mt-2 text-sm font-semibold px-6 py-3 rounded-xl text-white w-full cursor-pointer">
               Start Prediction

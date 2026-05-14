@@ -3,6 +3,8 @@
 import "./prediction.css";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import AIExplanation from "../components/AIExplanation";
+import AIChatWidget from "../components/AIChatWidget";
 import {
   ArrowLeft,
   Activity,
@@ -31,6 +33,7 @@ import {
   ShieldCheck,
   Clock,
   Target,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -43,8 +46,8 @@ function ConfidenceRing({ value, size = 140 }) {
     value >= 80
       ? "#10b981"
       : value >= 60
-      ? "#f59e0b"
-      : "#ef4444";
+        ? "#f59e0b"
+        : "#ef4444";
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -90,10 +93,10 @@ function ConfidenceRing({ value, size = 140 }) {
 }
 
 /* ──────────── Styled Components ──────────── */
-function InputField({ label, name, value, onChange, type = "number", step, required = false, icon }) {
+function InputField({ label, name, value, onChange, type = "number", step, required = false, icon, placeholder = "" }) {
   return (
     <div className="pred-field-group">
-      <label className="pred-label">{label}</label>
+      <label className="pred-label">{label}{required && <span style={{color:'#ef4444',marginLeft:2}}>*</span>}</label>
       <div className="pred-input-wrap">
         {icon && <span className="pred-input-icon">{icon}</span>}
         <input
@@ -103,6 +106,7 @@ function InputField({ label, name, value, onChange, type = "number", step, requi
           value={value}
           onChange={onChange}
           required={required}
+          placeholder={placeholder || `Enter ${label}`}
           className="pred-input"
           style={icon ? { paddingLeft: "2.5rem" } : {}}
         />
@@ -111,19 +115,20 @@ function InputField({ label, name, value, onChange, type = "number", step, requi
   );
 }
 
-function SelectField({ label, name, value, onChange, options, icon }) {
+function SelectField({ label, name, value, onChange, options, icon, required = false, placeholder = "Select..." }) {
   return (
     <div className="pred-field-group">
-      <label className="pred-label">{label}</label>
+      <label className="pred-label">{label}{required && <span style={{color:'#ef4444',marginLeft:2}}>*</span>}</label>
       <div className="pred-input-wrap">
         {icon && <span className="pred-input-icon">{icon}</span>}
         <select
           name={name}
           value={value}
           onChange={onChange}
-          className="pred-select"
+          className={`pred-select ${value === "" ? "pred-select-placeholder" : ""}`}
           style={icon ? { paddingLeft: "2.5rem" } : {}}
         >
+          <option value="" disabled>{placeholder}</option>
           {options.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -135,30 +140,31 @@ function SelectField({ label, name, value, onChange, options, icon }) {
   );
 }
 
-function SliderField({ label, name, value, onChange, min = 0, max = 1, step = 0.01, hint }) {
-  const displayVal = value === "" ? "—" : Number(value).toFixed(2);
-  const pct = value === "" ? 50 : ((value - min) / (max - min)) * 100;
+function SliderField({ label, name, value, onChange, min = 0, max = 1, step = 0.05, hint }) {
+  const numValue = value === "" ? 0.5 : parseFloat(value);
+  const displayVal = typeof numValue === "number" ? numValue.toFixed(2) : "0.50";
+
   return (
     <div className="pred-field-group">
       <div className="flex items-center justify-between mb-1">
         <label className="pred-label" style={{ marginBottom: 0 }}>{label}</label>
         <span className="pred-slider-val">{displayVal}</span>
       </div>
-      <div className="pred-slider-track-wrap">
-        <div className="pred-slider-track-bg">
-          <div className="pred-slider-track-fill" style={{ width: `${pct}%` }} />
-        </div>
-        <input
-          type="range"
-          name={name}
-          value={value === "" ? (max - min) / 2 + min : value}
-          onChange={onChange}
-          min={min}
-          max={max}
-          step={step}
-          className="pred-slider-input"
-        />
-      </div>
+      <input
+        type="range"
+        name={name}
+        min={min}
+        max={max}
+        step={step}
+        value={numValue}
+        onChange={(e) => onChange({ target: { name, value: parseFloat(e.target.value) } })}
+        style={{
+          width: "100%",
+          accentColor: "#06b6d4",
+          cursor: "pointer",
+          height: "6px",
+        }}
+      />
       {hint && <p className="pred-slider-hint">{hint}</p>}
     </div>
   );
@@ -231,40 +237,104 @@ const QUALITY_MAP = {
 /*                       MAIN COMPONENT                           */
 /* ════════════════════════════════════════════════════════════════ */
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://ai-based-medical-recommendation-system.onrender.com";
+
 export default function PredictionPage() {
   const [formData, setFormData] = useState({
-    Age: 45, Gender: "Male", BMI: 26.5,
-    eGFR: 90.0, HbA1c: 5.5, TSH: 2.0, LDL_Cholesterol: 100.0,
-    Diabetes: "0", Hypertension: "0", Heart_Disease: "0",
+    Age: "", Gender: "", BMI: "",
+    eGFR: "", HbA1c: "", TSH: "", LDL_Cholesterol: "",
+    Diabetes: "", Hypertension: "", Heart_Disease: "",
   });
 
   const [advancedData, setAdvancedData] = useState({
-    Blood_Pressure: 120, Heart_Rate: 75, Cholesterol: 200,
-    Fasting_Glucose: 95, WBC: 7.0, ACR: 20.0,
-    Smoking_Status: "Never", Alcohol_Intake: "None",
-    Asthma: "0", Thyroid: "0", Infection: "0", GERD_Flag: "0", CAD_Flag: "0",
-    Genetic_Risk_Score: 0.5, Genetic_Drug_Match_Score: 0.8,
-    Drug_Efficacy_Multiplier: 0.8, Statin_Response_Score: 0.75,
-    Clopidogrel_Metabolism_Score: 0.6, Hepatic_Metabolism_Rate: 0.9,
-    CYP2C19_Metabolism: "Intermediate", Anti_Inflammatory_Response: 0.75,
-    Polygenic_Risk_Index: 0.5, Genetic_Contraindication_Flag: "0",
+    Blood_Pressure: "", Heart_Rate: "", Cholesterol: "",
+    Fasting_Glucose: "", WBC: "", ACR: "",
+    Smoking_Status: "", Alcohol_Intake: "",
+    Asthma: "", Thyroid: "", Infection: "", GERD_Flag: "", CAD_Flag: "",
+    Genetic_Risk_Score: "", Genetic_Drug_Match_Score: "",
+    Drug_Efficacy_Multiplier: "", Statin_Response_Score: "",
+    Clopidogrel_Metabolism_Score: "", Hepatic_Metabolism_Rate: "",
+    CYP2C19_Metabolism: "", Anti_Inflammatory_Response: "",
+    Polygenic_Risk_Index: "", Genetic_Contraindication_Flag: "",
   });
 
+  // Track which advanced fields the user has explicitly changed
+  const [advancedTouched, setAdvancedTouched] = useState({});
+  const [validationError, setValidationError] = useState(null);
+
   const [advancedMode, setAdvancedMode] = useState(false);
+
+  const handleToggleAdvanced = () => {
+    const nextMode = !advancedMode;
+    setAdvancedMode(nextMode);
+
+    if (nextMode) {
+      setAdvancedData(prev => ({
+        ...prev,
+        Genetic_Drug_Match_Score: prev.Genetic_Drug_Match_Score === "" ? 0.5 : prev.Genetic_Drug_Match_Score,
+        Drug_Efficacy_Multiplier: prev.Drug_Efficacy_Multiplier === "" ? 0.5 : prev.Drug_Efficacy_Multiplier,
+        Statin_Response_Score: prev.Statin_Response_Score === "" ? 0.5 : prev.Statin_Response_Score,
+        Clopidogrel_Metabolism_Score: prev.Clopidogrel_Metabolism_Score === "" ? 0.5 : prev.Clopidogrel_Metabolism_Score,
+        Hepatic_Metabolism_Rate: prev.Hepatic_Metabolism_Rate === "" ? 0.5 : prev.Hepatic_Metabolism_Rate,
+        Genetic_Risk_Score: prev.Genetic_Risk_Score === "" ? 0.5 : prev.Genetic_Risk_Score,
+        Anti_Inflammatory_Response: prev.Anti_Inflammatory_Response === "" ? 0.5 : prev.Anti_Inflammatory_Response,
+        Polygenic_Risk_Index: prev.Polygenic_Risk_Index === "" ? 0.5 : prev.Polygenic_Risk_Index,
+      }));
+    } else {
+      setAdvancedData(prev => ({
+        ...prev,
+        Genetic_Drug_Match_Score: "",
+        Drug_Efficacy_Multiplier: "",
+        Statin_Response_Score: "",
+        Clopidogrel_Metabolism_Score: "",
+        Hepatic_Metabolism_Rate: "",
+        Genetic_Risk_Score: "",
+        Anti_Inflammatory_Response: "",
+        Polygenic_Risk_Index: "",
+      }));
+    }
+  };
+
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const resultRef = useRef(null);
 
+  // Check if all core fields are filled
+  const coreFieldsFilled = (
+    formData.Age !== "" &&
+    formData.Gender !== "" &&
+    formData.BMI !== "" &&
+    formData.eGFR !== "" &&
+    formData.HbA1c !== "" &&
+    formData.TSH !== "" &&
+    formData.LDL_Cholesterol !== "" &&
+    formData.Diabetes !== "" &&
+    formData.Hypertension !== "" &&
+    formData.Heart_Disease !== ""
+  );
+
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-  const handleAdvancedChange = (e) => setAdvancedData({ ...advancedData, [e.target.name]: e.target.value });
+  const handleAdvancedChange = (e) => {
+    setAdvancedData({ ...advancedData, [e.target.name]: e.target.value });
+    setAdvancedTouched({ ...advancedTouched, [e.target.name]: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setValidationError(null);
+
+    // Validate all core fields are filled
+    if (!coreFieldsFilled) {
+      setValidationError("Please fill in all required core fields before running the analysis.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
 
+    // Always include core fields
     const payload = {
       Age: Number(formData.Age), Gender: formData.Gender, BMI: Number(formData.BMI),
       eGFR: Number(formData.eGFR), HbA1c: Number(formData.HbA1c), TSH: Number(formData.TSH),
@@ -273,34 +343,50 @@ export default function PredictionPage() {
       Heart_Disease: Number(formData.Heart_Disease),
     };
 
+    // Only add advanced fields if advanced mode is ON AND the user actually touched/filled them
     if (advancedMode) {
-      Object.assign(payload, {
-        Blood_Pressure: Number(advancedData.Blood_Pressure),
-        Heart_Rate: Number(advancedData.Heart_Rate),
-        Cholesterol: Number(advancedData.Cholesterol),
-        Fasting_Glucose: Number(advancedData.Fasting_Glucose),
-        WBC: Number(advancedData.WBC), ACR: Number(advancedData.ACR),
+      const numericAdvanced = {
+        Blood_Pressure: advancedData.Blood_Pressure,
+        Heart_Rate: advancedData.Heart_Rate,
+        Cholesterol: advancedData.Cholesterol,
+        Fasting_Glucose: advancedData.Fasting_Glucose,
+        WBC: advancedData.WBC,
+        ACR: advancedData.ACR,
+        Asthma: advancedData.Asthma,
+        Thyroid: advancedData.Thyroid,
+        Infection: advancedData.Infection,
+        GERD_Flag: advancedData.GERD_Flag,
+        CAD_Flag: advancedData.CAD_Flag,
+        Genetic_Risk_Score: advancedData.Genetic_Risk_Score,
+        Genetic_Drug_Match_Score: advancedData.Genetic_Drug_Match_Score,
+        Drug_Efficacy_Multiplier: advancedData.Drug_Efficacy_Multiplier,
+        Statin_Response_Score: advancedData.Statin_Response_Score,
+        Clopidogrel_Metabolism_Score: advancedData.Clopidogrel_Metabolism_Score,
+        Hepatic_Metabolism_Rate: advancedData.Hepatic_Metabolism_Rate,
+        Anti_Inflammatory_Response: advancedData.Anti_Inflammatory_Response,
+        Polygenic_Risk_Index: advancedData.Polygenic_Risk_Index,
+        Genetic_Contraindication_Flag: advancedData.Genetic_Contraindication_Flag,
+      };
+      for (const [key, val] of Object.entries(numericAdvanced)) {
+        if (advancedTouched[key] && val !== "") {
+          payload[key] = Number(val);
+        }
+      }
+      // String advanced fields
+      const stringAdvanced = {
         Smoking_Status: advancedData.Smoking_Status,
         Alcohol_Intake: advancedData.Alcohol_Intake,
-        Asthma: Number(advancedData.Asthma), Thyroid: Number(advancedData.Thyroid),
-        Infection: Number(advancedData.Infection),
-        GERD_Flag: Number(advancedData.GERD_Flag), CAD_Flag: Number(advancedData.CAD_Flag),
-        Genetic_Risk_Score: Number(advancedData.Genetic_Risk_Score),
-        Genetic_Drug_Match_Score: Number(advancedData.Genetic_Drug_Match_Score),
-        Drug_Efficacy_Multiplier: Number(advancedData.Drug_Efficacy_Multiplier),
-        Statin_Response_Score: Number(advancedData.Statin_Response_Score),
-        Clopidogrel_Metabolism_Score: Number(advancedData.Clopidogrel_Metabolism_Score),
-        Hepatic_Metabolism_Rate: Number(advancedData.Hepatic_Metabolism_Rate),
         CYP2C19_Metabolism: advancedData.CYP2C19_Metabolism,
-        Anti_Inflammatory_Response: Number(advancedData.Anti_Inflammatory_Response),
-        Polygenic_Risk_Index: Number(advancedData.Polygenic_Risk_Index),
-        Genetic_Contraindication_Flag: Number(advancedData.Genetic_Contraindication_Flag),
-      });
+      };
+      for (const [key, val] of Object.entries(stringAdvanced)) {
+        if (advancedTouched[key] && val !== "") {
+          payload[key] = val;
+        }
+      }
     }
 
     try {
-      const apiUrl = "https://ai-based-medical-recommendation-system.onrender.com";
-      const response = await fetch(`${apiUrl}/predict`, {
+      const response = await fetch(`${API_URL}/predict`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -308,7 +394,6 @@ export default function PredictionPage() {
       if (!response.ok) throw new Error("Failed to connect to AI engine");
       const data = await response.json();
       setResult(data);
-      // Scroll to result on mobile
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 200);
@@ -317,6 +402,26 @@ export default function PredictionPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper: build patientData object with only filled fields (for AI components)
+  const buildFilledPatientData = () => {
+    const data = {
+      Age: Number(formData.Age), Gender: formData.Gender, BMI: Number(formData.BMI),
+      eGFR: Number(formData.eGFR), HbA1c: Number(formData.HbA1c), TSH: Number(formData.TSH),
+      LDL_Cholesterol: Number(formData.LDL_Cholesterol),
+      Diabetes: Number(formData.Diabetes), Hypertension: Number(formData.Hypertension),
+      Heart_Disease: Number(formData.Heart_Disease),
+    };
+    if (advancedMode) {
+      for (const [key, val] of Object.entries(advancedData)) {
+        if (advancedTouched[key] && val !== "") {
+          const stringFields = ["Smoking_Status", "Alcohol_Intake", "CYP2C19_Metabolism"];
+          data[key] = stringFields.includes(key) ? val : Number(val);
+        }
+      }
+    }
+    return data;
   };
 
   const featureCount = advancedMode ? 33 : 10;
@@ -409,18 +514,19 @@ export default function PredictionPage() {
                 defaultOpen={true}
               >
                 <div className="pred-grid-3">
-                  <InputField label="Age" name="Age" value={formData.Age} onChange={handleChange} required />
+                  <InputField label="Age" name="Age" value={formData.Age} onChange={handleChange} required placeholder="e.g. 45" />
                   <SelectField
                     label="Gender"
                     name="Gender"
                     value={formData.Gender}
                     onChange={handleChange}
+                    required
                     options={[
                       { value: "Male", label: "Male" },
                       { value: "Female", label: "Female" },
                     ]}
                   />
-                  <InputField label="BMI" name="BMI" value={formData.BMI} onChange={handleChange} step="0.1" required />
+                  <InputField label="BMI" name="BMI" value={formData.BMI} onChange={handleChange} step="0.1" required placeholder="e.g. 26.5" />
                 </div>
               </Section>
 
@@ -456,6 +562,7 @@ export default function PredictionPage() {
                       name={flag.name}
                       value={formData[flag.name]}
                       onChange={handleChange}
+                      required
                       options={[
                         { value: "0", label: "No" },
                         { value: "1", label: "Yes" },
@@ -469,7 +576,7 @@ export default function PredictionPage() {
               <div className="pred-advanced-toggle-wrap">
                 <button
                   type="button"
-                  onClick={() => setAdvancedMode(!advancedMode)}
+                  onClick={handleToggleAdvanced}
                   className="pred-advanced-toggle"
                 >
                   <div className={`pred-toggle-switch ${advancedMode ? "on" : ""}`}>
@@ -641,12 +748,21 @@ export default function PredictionPage() {
                 )}
               </AnimatePresence>
 
+              {/* ── Validation Message ── */}
+              {validationError && (
+                <div className="pred-validation-error">
+                  <AlertCircle size={16} />
+                  <span>{validationError}</span>
+                </div>
+              )}
+
               {/* ── Submit ── */}
               <div className="pred-submit-area">
                 <button
                   type="submit"
-                  disabled={loading}
-                  className={`pred-submit-btn ${loading ? "loading" : ""}`}
+                  disabled={loading || !coreFieldsFilled}
+                  className={`pred-submit-btn ${loading ? "loading" : ""} ${!coreFieldsFilled ? "disabled" : ""}`}
+                  title={!coreFieldsFilled ? "Please fill all required fields" : ""}
                 >
                   {loading ? (
                     <div className="pred-spinner" />
@@ -657,6 +773,9 @@ export default function PredictionPage() {
                     </>
                   )}
                 </button>
+                {!coreFieldsFilled && (
+                  <p className="pred-submit-hint">Fill all required (*) fields to enable analysis</p>
+                )}
               </div>
             </form>
           </motion.div>
@@ -832,17 +951,44 @@ export default function PredictionPage() {
                     </div>
                   )}
 
-                  <button
-                    onClick={() => setResult(null)}
-                    className="pred-reset-btn"
-                  >
-                    <Activity size={14} />
-                    New Analysis
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setResult(null)}
+                      className="pred-reset-btn"
+                    >
+                      <Activity size={14} />
+                      New Analysis
+                    </button>
+                    <Link href="/knowledge-base" className="pred-reset-btn" style={{ textDecoration: 'none' }}>
+                      <BookOpen size={14} />
+                      Drug Knowledge Base
+                    </Link>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.div>
+
+          {/* ════════════ AI SECTION (Explanation + Chat) ════════════ */}
+          {result && !loading && (
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="pred-ai-section"
+            >
+              <AIExplanation
+                drugName={result.prediction}
+                patientData={buildFilledPatientData()}
+                apiUrl={API_URL}
+              />
+              <AIChatWidget
+                drugName={result.prediction}
+                patientData={buildFilledPatientData()}
+                apiUrl={API_URL}
+              />
+            </motion.div>
+          )}
         </div>
       </div>
     </main>

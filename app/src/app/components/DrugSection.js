@@ -219,49 +219,49 @@ export default function DrugSection() {
   // Get unique categories
   const categories = drugs
     ? ["All", ...new Set(Object.values(drugs).map((d) => {
-        // Simplify category names for filter buttons
-        if (d.class.includes("Antidiabetic")) return "Diabetes";
-        if (d.class.includes("Channel Blocker") || d.class.includes("ARB")) return "Blood Pressure";
-        if (d.class.includes("Statin")) return "Cholesterol";
-        if (d.class.includes("Antiplatelet") || d.class.includes("NSAID")) return "Heart / Blood";
-        if (d.class.includes("Thyroid")) return "Thyroid";
-        if (d.class.includes("Bronchodilator")) return "Respiratory";
-        if (d.class.includes("Proton")) return "Gastric";
-        if (d.class.includes("Obesity")) return "Weight";
-        if (d.class.includes("Analgesic")) return "Pain / Fever";
-        if (d.class.includes("Antibiotic")) return "Infection";
-        if (d.class.includes("No Medication")) return "No Drug";
-        return "Other";
-      }))]
+      // Simplify category names for filter buttons
+      if (d.class.includes("Antidiabetic")) return "Diabetes";
+      if (d.class.includes("Channel Blocker") || d.class.includes("ARB")) return "Blood Pressure";
+      if (d.class.includes("Statin")) return "Cholesterol";
+      if (d.class.includes("Antiplatelet") || d.class.includes("NSAID")) return "Heart / Blood";
+      if (d.class.includes("Thyroid")) return "Thyroid";
+      if (d.class.includes("Bronchodilator")) return "Respiratory";
+      if (d.class.includes("Proton")) return "Gastric";
+      if (d.class.includes("Obesity")) return "Weight";
+      if (d.class.includes("Analgesic")) return "Pain / Fever";
+      if (d.class.includes("Antibiotic")) return "Infection";
+      if (d.class.includes("No Medication")) return "No Drug";
+      return "Other";
+    }))]
     : ["All"];
 
   // Filter drugs
   const filteredDrugs = drugs
     ? Object.entries(drugs).filter(([name, drug]) => {
-        const matchesSearch =
-          name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          drug.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          drug.conditions.some((c) => c.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesSearch =
+        name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        drug.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        drug.conditions.some((c) => c.toLowerCase().includes(searchTerm.toLowerCase()));
 
-        if (selectedCategory === "All") return matchesSearch;
+      if (selectedCategory === "All") return matchesSearch;
 
-        const drugCat = (() => {
-          if (drug.class.includes("Antidiabetic")) return "Diabetes";
-          if (drug.class.includes("Channel Blocker") || drug.class.includes("ARB")) return "Blood Pressure";
-          if (drug.class.includes("Statin")) return "Cholesterol";
-          if (drug.class.includes("Antiplatelet") || drug.class.includes("NSAID")) return "Heart / Blood";
-          if (drug.class.includes("Thyroid")) return "Thyroid";
-          if (drug.class.includes("Bronchodilator")) return "Respiratory";
-          if (drug.class.includes("Proton")) return "Gastric";
-          if (drug.class.includes("Obesity")) return "Weight";
-          if (drug.class.includes("Analgesic")) return "Pain / Fever";
-          if (drug.class.includes("Antibiotic")) return "Infection";
-          if (drug.class.includes("No Medication")) return "No Drug";
-          return "Other";
-        })();
+      const drugCat = (() => {
+        if (drug.class.includes("Antidiabetic")) return "Diabetes";
+        if (drug.class.includes("Channel Blocker") || drug.class.includes("ARB")) return "Blood Pressure";
+        if (drug.class.includes("Statin")) return "Cholesterol";
+        if (drug.class.includes("Antiplatelet") || drug.class.includes("NSAID")) return "Heart / Blood";
+        if (drug.class.includes("Thyroid")) return "Thyroid";
+        if (drug.class.includes("Bronchodilator")) return "Respiratory";
+        if (drug.class.includes("Proton")) return "Gastric";
+        if (drug.class.includes("Obesity")) return "Weight";
+        if (drug.class.includes("Analgesic")) return "Pain / Fever";
+        if (drug.class.includes("Antibiotic")) return "Infection";
+        if (drug.class.includes("No Medication")) return "No Drug";
+        return "Other";
+      })();
 
-        return matchesSearch && drugCat === selectedCategory;
-      })
+      return matchesSearch && drugCat === selectedCategory;
+    })
     : [];
 
   return (
@@ -329,11 +329,10 @@ export default function DrugSection() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`text-[0.78rem] font-medium px-4 py-2 rounded-xl transition-all duration-300 cursor-pointer ${
-                  selectedCategory === cat
+                className={`text-[0.78rem] font-medium px-4 py-2 rounded-xl transition-all duration-300 cursor-pointer ${selectedCategory === cat
                     ? "bg-accent-purple/20 text-accent-purple-light border border-accent-purple/30 shadow-[0_0_12px_rgba(99,102,241,0.15)]"
                     : "text-text-muted hover:text-text-secondary border border-transparent hover:border-white/10 hover:bg-white/[0.03]"
-                }`}
+                  }`}
               >
                 {cat}
               </button>

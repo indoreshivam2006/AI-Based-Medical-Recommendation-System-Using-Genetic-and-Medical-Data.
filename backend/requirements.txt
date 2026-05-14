@@ -3,3 +3,7 @@ uvicorn
 scikit-learn
 pandas
 numpy
+openai
+chromadb
+shap
+python-dotenv

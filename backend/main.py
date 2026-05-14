@@ -1,10 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import pickle
 import uvicorn
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+
+# AI / Explainability / RAG imports
+from ai_service import explain_recommendation, answer_medical_question, generate_rag_answer, DISCLAIMER
+from rag_service import setup_rag_collection, retrieve_relevant_docs, get_source_drugs
+from explainability import get_shap_explanation
 
 app = FastAPI(title="Genovix Medical Recommendation API")
 
@@ -28,6 +33,13 @@ try:
     print("Model loaded successfully!")
 except Exception as e:
     print(f"Error loading model artifacts: {e}")
+
+# Initialize AI services on startup
+try:
+    setup_rag_collection()
+    print("AI services initialized: Gemini + ChromaDB + SHAP")
+except Exception as e:
+    print(f"Warning: AI services initialization error: {e}")
 
 class PredictionRequest(BaseModel):
     # Core 10 inputs from the frontend (always required)
@@ -263,6 +275,61 @@ def predict(request: PredictionRequest):
             if k in data:
                 data[k] = v
 
+        # Determine prediction quality tier
+        if features_provided >= 30:
+            quality = "Precision"
+        elif features_provided >= 20:
+            quality = "Enhanced"
+        else:
+            quality = "Basic"
+
+        # ── Normal Range Check: Skip ML model for healthy patients ──
+        # Step 1: Check core fields
+        core_normal = (
+            18.5 <= request.BMI <= 24.9 and
+            request.eGFR > 60 and
+            request.HbA1c < 5.7 and
+            0.4 <= request.TSH <= 4.0 and
+            request.LDL_Cholesterol < 100 and
+            request.Diabetes == 0 and
+            request.Hypertension == 0 and
+            request.Heart_Disease == 0
+        )
+
+        # Step 2: Check advanced fields for serious conditions
+        advanced_serious = False
+        if core_normal:
+            # Only check advanced fields that were actually provided
+            if request.Asthma is not None and request.Asthma == 1:
+                advanced_serious = True
+            if request.CAD_Flag is not None and request.CAD_Flag == 1:
+                advanced_serious = True
+            if request.Thyroid is not None and request.Thyroid == 1:
+                advanced_serious = True
+            if request.GERD_Flag is not None and request.GERD_Flag == 1:
+                advanced_serious = True
+            if request.Blood_Pressure is not None and request.Blood_Pressure > 140:
+                advanced_serious = True
+            if request.Cholesterol is not None and request.Cholesterol > 200:
+                advanced_serious = True
+            if request.Genetic_Risk_Score is not None and request.Genetic_Risk_Score > 0.7:
+                advanced_serious = True
+            if request.Genetic_Contraindication_Flag is not None and request.Genetic_Contraindication_Flag == 1:
+                advanced_serious = True
+
+        all_normal = core_normal and not advanced_serious
+
+        if all_normal:
+            return {
+                "prediction": "No Medication Required",
+                "confidence": 100.0,
+                "features_provided": features_provided,
+                "features_total": total_features,
+                "quality": quality,
+                "status": "success",
+                "message": "Your clinical markers are all within normal range. No medication is currently recommended."
+            }
+
         # Compute derived features as the original notebook trained with them
         if 'Genetic_Drug_Match_Score' in data:
             data['Genetic_HbA1c_Int'] = data['Genetic_Drug_Match_Score'] * (data['HbA1c'] / 10)
@@ -302,14 +369,6 @@ def predict(request: PredictionRequest):
         probabilities = model.predict_proba(X)[0]
         top_prob = float(max(probabilities))
         
-        # Determine prediction quality tier
-        if features_provided >= 30:
-            quality = "Precision"
-        elif features_provided >= 20:
-            quality = "Enhanced"
-        else:
-            quality = "Basic"
-        
         return {
             "prediction": str(prediction),
             "confidence": round(top_prob * 100, 2),
@@ -321,6 +380,131 @@ def predict(request: PredictionRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════════
+#  Pydantic Models for AI Endpoints
+# ═══════════════════════════════════════════════════════════════
+
+class ExplainRequest(BaseModel):
+    """Request body for the /api/explain endpoint."""
+    drug_name: str
+    patient_data: Dict[str, Any]
+
+class ChatRequest(BaseModel):
+    """Request body for the /api/chat endpoint."""
+    message: str
+    drug_name: str
+    patient_data: Dict[str, Any]
+    chat_history: Optional[List[Dict[str, str]]] = []
+
+class RAGSearchRequest(BaseModel):
+    """Request body for the /api/rag-search endpoint."""
+    question: str
+
+
+# ═══════════════════════════════════════════════════════════════
+#  AI-Powered Endpoints
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/explain")
+def explain_drug_recommendation(request: ExplainRequest):
+    """
+    Generate a natural language explanation for a drug recommendation.
+    Uses SHAP for feature importance and Gemini API for explanation generation.
+    """
+    try:
+        patient_data = request.patient_data
+        drug_name = request.drug_name
+
+        # ── Step 1: Prepare input data for SHAP (same pipeline as /predict) ──
+        data = baselines.copy()
+        for k, v in patient_data.items():
+            if k in data:
+                data[k] = v
+
+        # Compute derived features
+        if 'Genetic_Drug_Match_Score' in data:
+            data['Genetic_HbA1c_Int'] = data['Genetic_Drug_Match_Score'] * (data.get('HbA1c', 5.5) / 10)
+            data['Genetic_eGFR_Int'] = data['Genetic_Drug_Match_Score'] * (data.get('eGFR', 90) / 100)
+        if 'Drug_Efficacy_Multiplier' in data:
+            data['DrugEff_BMI_Int'] = data['Drug_Efficacy_Multiplier'] * (data.get('BMI', 26) / 30)
+        if 'Hepatic_Metabolism_Rate' in data:
+            data['Metabolism_LDL_Int'] = data['Hepatic_Metabolism_Rate'] * (data.get('LDL_Cholesterol', 100) / 100)
+        if all(k in data for k in ['Genetic_Drug_Match_Score', 'Drug_Efficacy_Multiplier', 'Statin_Response_Score', 'Clopidogrel_Metabolism_Score']):
+            data['Pharma_Score_Combo'] = (
+                data['Genetic_Drug_Match_Score'] * 0.4 +
+                data['Drug_Efficacy_Multiplier'] * 0.3 +
+                data['Statin_Response_Score'] * 0.15 +
+                data['Clopidogrel_Metabolism_Score'] * 0.15
+            )
+
+        df = pd.DataFrame([data])
+        df_encoded = pd.get_dummies(df, drop_first=True)
+        for col in expected_features:
+            if col not in df_encoded.columns:
+                df_encoded[col] = 0
+        X = df_encoded[expected_features]
+
+        # ── Step 2: Get SHAP explanation ──
+        top_features = get_shap_explanation(model, X, feature_names=expected_features)
+
+        # ── Step 3: Generate natural language explanation via Gemini ──
+        explanation = explain_recommendation(drug_name, patient_data, top_features)
+
+        return {
+            "explanation": explanation,
+            "top_features": top_features,
+            "disclaimer": DISCLAIMER
+        }
+
+    except Exception as e:
+        print(f"❌ /api/explain error: {e}")
+        raise HTTPException(status_code=500, detail=f"Explanation generation failed: {str(e)}")
+
+
+@app.post("/api/chat")
+async def chat(request: Request):
+    try:
+        body = await request.json()
+        question = body.get("question", "")
+        drug_name = body.get("drug_name", "Unknown")
+        patient_data = body.get("patient_data", {})
+        chat_history = body.get("chat_history", [])
+        
+        if not question:
+            return {"answer": "Please ask a question."}
+        
+        answer = answer_medical_question(
+            question, drug_name, patient_data, chat_history
+        )
+        return {"answer": answer}
+    except Exception as e:
+        return {"answer": f"Error processing request: {str(e)}"}
+
+
+@app.post("/api/rag-search")
+def rag_search(request: RAGSearchRequest):
+    """
+    Search the drug knowledge base using RAG and return an AI-generated answer
+    grounded in the retrieved medical documents.
+    """
+    try:
+        # ── Step 1: Retrieve relevant documents from ChromaDB ──
+        retrieved_docs = retrieve_relevant_docs(request.question, top_k=3)
+        source_drugs = get_source_drugs(request.question, top_k=3)
+
+        # ── Step 2: Generate grounded answer via Gemini ──
+        answer = generate_rag_answer(request.question, retrieved_docs)
+
+        return {
+            "answer": answer,
+            "sources": source_drugs
+        }
+
+    except Exception as e:
+        print(f"❌ /api/rag-search error: {e}")
+        raise HTTPException(status_code=500, detail=f"RAG search failed: {str(e)}")
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
